@@ -1,12 +1,7 @@
-#
-#   Hello World server in Python
-#   Binds REP socket to tcp://*:5555
-#   Expects b"Hello" from client, replies with b"World"
-#
-
 import time
 import zmq
 
+# Create Socket to receive request
 context = zmq.Context()
 socket = context.socket(zmq.REP)
 socket.connect("tcp://localhost:5560")

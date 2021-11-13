@@ -11,18 +11,29 @@ def signal_handler(sig, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
-# Create a Subscriber socket
-context = zmq.Context()
+class Subscriber:
+    def __init__(self, id) -> None:
+        self.id = id
 
-socket = context.socket(zmq.XSUB)
-socket.connect('tcp://localhost:5555')
+        # Create a Subscriber socket
+        context = zmq.Context()
 
-# Subscribe to message of the given topic
-topic = '\x01' + sys.argv[1]
-socket.send(topic.encode('utf-8'))
+        self.proxy_socket = context.socket(zmq.XSUB)
+        self.proxy_socket.connect('tcp://localhost:5555')
 
-# Receive messages about the topic subscribed
-while True:
-    message = socket.recv_multipart()
-    print(bytes.join(b'', message).decode("utf-8"))
-    time.sleep(1)
+
+    def subscribe(self, topic):
+        # Subscribe to message of the given topic
+        subs_message = '\x01' + topic
+        self.proxy_socket.send(subs_message.encode('utf-8'))
+    
+    def unsubscribe(self, topic):
+        # Unsubscribe to message of the given topic
+        unsub_message = '\x00' + topic
+        self.proxy_socket.send(unsub_message.encode('utf-8'))
+
+        
+    #def get(self, n_msg):
+        # For loop in range(n_msg)
+        # Send Message to Proxy asking for message
+        # Respond to proxy confirming 

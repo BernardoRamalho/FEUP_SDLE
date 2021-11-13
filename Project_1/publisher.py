@@ -12,17 +12,14 @@ def signal_handler(sig, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
-# Create Publisher Socket
-context = zmq.Context()
-socket = context.socket(zmq.PUB)
-socket.connect('tcp://localhost:5560')
+class Publisher:
+    def __init__(self) -> None:
+        # Create Publisher Socket
+        context = zmq.Context()
+        self.proxy_socket = context.socket(zmq.PUB)
+        self.proxy_socket.connect('tcp://localhost:5560')
 
-topic = sys.argv[1]
-
-# Send random string about the topic
-while True:
-    string_length = random.randrange(5, 25)
-    ran = ''.join(random.choices(string.ascii_uppercase + string.digits, k = string_length))
-    socket.send_string(topic + " : " + str(ran))
-
-    time.sleep(1)
+    def put(self, topic):
+        string_length = random.randrange(5, 25)
+        ran = ''.join(random.choices(string.ascii_uppercase + string.digits, k = string_length))
+        self.proxy_socket.send_string(topic + " : " + str(ran))

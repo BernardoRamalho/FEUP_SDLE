@@ -26,14 +26,19 @@ class Subscriber:
         # Subscribe to message of the given topic
         subs_message = '\x01' + topic
         self.proxy_socket.send(subs_message.encode('utf-8'))
+        print('Client ' + str(self.id) + ' subscribed to topic ' + topic)
+
     
     def unsubscribe(self, topic):
         # Unsubscribe to message of the given topic
         unsub_message = '\x00' + topic
         self.proxy_socket.send(unsub_message.encode('utf-8'))
+        print('Client ' + str(self.id) + ' unsubscribed to topic ' + topic)
 
         
-    #def get(self, n_msg):
-        # For loop in range(n_msg)
-        # Send Message to Proxy asking for message
-        # Respond to proxy confirming 
+    def get(self, topic):
+        message = str(self.id) + ' ' + topic
+        self.proxy_socket.send(message.encode('utf-8'))
+        response = self.proxy_socket.recv_multipart()
+        print('Client ' + str(self.id) + ' received: ' + bytes.join(b'', response))
+        message = str(self.id) + ' received'

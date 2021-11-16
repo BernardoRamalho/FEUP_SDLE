@@ -1,6 +1,5 @@
 import string    
 import random
-import time
 import zmq
 import sys
 import signal

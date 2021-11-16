@@ -2,7 +2,7 @@ class Topic:
     def __init__(self, name) -> None:
         # Topic ID
         self.name = name
-
+        self.num_msg = 0
         # Arrays/Dictionary to save information about the topic
         self.subs = []
         self.messages = {} # Key --> message ID; Value --> Message content
@@ -12,11 +12,14 @@ class Topic:
         self.messages_stored_view = self.messages.keys()
         self.last_message_view = self.subs_last_message.values()
 
-        print('Topic ' + name + 'created successfully!')
+        print('Topic ' + name + ' created successfully!')
 
     # Adds a message to this topic
-    def add_message(self, message):
-        self.messages[str(len(self.messages))] = message
+    async def add_message(self, message):
+        print("Current lenght: " + str(self.num_msg))
+        self.num_msg += 1
+        self.messages[self.num_msg] = message
+        print("Added message. New len: "+ str(self.num_msg))
 
     # Removes all messages that have already been sent
     def remove_message(self):
@@ -34,6 +37,3 @@ class Topic:
     # Remove a subscriber to this topic
     def remove_sub(self, sub_id):
         self.subs.remove(sub_id)
-
-    
-    

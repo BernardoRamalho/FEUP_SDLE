@@ -1,7 +1,9 @@
 import zmq
 import signal
 import sys
-import time
+import asyncio
+from auxClasses import Topic
+from concurrent.futures import ThreadPoolExecutor
 
 # Signal Handler for Ctrl+C
 def signal_handler(sig, frame):
@@ -10,44 +12,105 @@ def signal_handler(sig, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
-# Create XPUB and XSUB sockets
-context = zmq.Context()
+class Proxy:
+    def __init__(self) -> None:
+        # Create XPUB and XSUB sockets
+        context = zmq.Context()
 
-frontend = context.socket(zmq.XPUB)
-frontend.bind("tcp://*:5555")
+        self.frontend = context.socket(zmq.XPUB)
+        self.frontend.bind("tcp://*:5555")
 
-backend = context.socket(zmq.XSUB)
-backend.bind("tcp://*:5560")
+        self.backend = context.socket(zmq.XSUB)
+        self.backend.bind("tcp://*:5560")
 
-# Create Poller to handle the messages
-poller = zmq.Poller()
-poller.register(frontend, zmq.POLLIN)
-poller.register(backend, zmq.POLLIN)
+        # Create Poller to handle the messages
+        self.poller = zmq.Poller()
+        self.poller.register(self.frontend, zmq.POLLIN)
+        self.poller.register(self.backend, zmq.POLLIN)
 
-# Create Dict to save topics
-topics = {} # Key --> topic name; Value --> topic object
-topics_key_view = topics.keys() # It will help check if a topic exists
+        # Create Dict to save topics
+        self.topics = {} # Key --> topic name; Value --> topic object
+        self.topics_key_view = self.topics.keys() # It will help check if a topic exists
 
-while True:
-    # Wait for sockets to receive messages
-    socks = dict(poller.poll())
+        # Create ThreadPoolExecutor for multi threading
+        self.executor = ThreadPoolExecutor(max_workers=25)
 
-    # Send messages to the other socket
-    if socks.get(frontend) == zmq.POLLIN:
-        message = frontend.recv_multipart()
-        print("FT:")
-        print(bytes.join(b'', message))
-        backend.send_multipart(message)
+    # Main loop of the proxy
+    def run(self):
+        while True:
+            # Wait for sockets to receive messages
+            try:
+                socks = dict(self.poller.poll())
+            except KeyboardInterrupt:
+                print('Closing Proxy!')
+                sys.exit(0)
 
-    if socks.get(backend) == zmq.POLLIN:
-        message = backend.recv_multipart()
-        print("BK:")
-        print(bytes.join(b'', message))
-        frontend.send_multipart(message)
 
-    time.sleep(0.1)
+            # Read message from sockets
+            if socks.get(self.frontend) == zmq.POLLIN:
+                message = self.frontend.recv_multipart()
 
-# We never reach this code
-frontend.close()
-backend.close()
-context.term()
+                self.parse_ft(message)
+
+            if socks.get(self.backend) == zmq.POLLIN:
+                message = self.backend.recv_multipart()
+   
+                self.executor.submit(self.parse_bck(message))
+
+        # We never reach this code
+        self.frontend.close()
+        self.backend.close()
+        self.context.term()
+
+    # Parse Messages comming from the frontend socket
+    def parse_ft(self, message_bytes):
+        message = message_bytes[0].decode('utf-8')
+            
+        if message[0] == '\x01': # message is '\x01topic_name sub_id'
+            topic_name, sub_id = message.replace(message[0], '').split()
+            
+            if topic_name in self.topics_key_view:
+                # If topic already exits, just add a new sub
+                self.topics[topic_name].add_sub(sub_id)
+            else:
+                # Create new topic
+                new_topic = Topic(topic_name)
+                new_topic.add_sub(sub_id)
+
+                # Send message to the socket telling that a new topic was created
+                self.backend.send_string('\x01' + topic_name)
+
+                # Add new topic to dict
+                self.topics[topic_name] = new_topic
+
+        elif message[0] == '\x00': # message is '\x00topic_name sub_id'
+            topic_name, sub_id = message.replace(message[0], '').split()
+            
+            if topic_name in self.topics_key_view:
+                self.topics[topic_name].remove_sub(sub_id)
+
+                if len(self.topics[topic_name].subs) == 0:
+                    del self.topics[topic_name]
+                    print("Topic " + topic_name + " deleted because no client subscribed to it.")
+
+                    # Send message to the socket telling that a topic was deleted
+                    self.backend.send_string('\x00' + topic_name)
+
+    # Parse Messages comming from the backend socket
+    # Messages from the backend are in the form of 'topic_name : message_content'
+    def parse_bck(self, message_bytes):
+        topic_name, message_content = message_bytes[0].decode('utf-8').split(' : ')
+
+        # Add Message to Topic
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(self.topics[topic_name].add_message(message_content))
+
+        # Tell publisher message was saved
+        self.backend.send(b'Saved')
+        
+
+
+
+proxy = Proxy()
+proxy.run()

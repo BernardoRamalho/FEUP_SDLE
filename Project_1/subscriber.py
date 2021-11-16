@@ -37,8 +37,13 @@ class Subscriber:
 
         
     def get(self, topic):
-        message = str(self.id) + ' ' + topic
-        self.proxy_socket.send(message.encode('utf-8'))
+        #message = str(self.id) + ' ' + topic
+        #self.proxy_socket.send(message.encode('utf-8'))
         response = self.proxy_socket.recv_multipart()
-        print('Client ' + str(self.id) + ' received: ' + bytes.join(b'', response))
-        message = str(self.id) + ' received'
+        print('Client ' + str(self.id) + ' received: ' + response[0].decode('utf-8'))
+        #message = str(self.id) + ' received'
+
+sub = Subscriber(1)
+sub.subscribe('fruit')
+while True:
+    sub.get('fruit')

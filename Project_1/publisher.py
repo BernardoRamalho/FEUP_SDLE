@@ -1,5 +1,6 @@
 import string    
 import random
+import time
 import zmq
 import sys
 import signal
@@ -22,3 +23,8 @@ class Publisher:
         string_length = random.randrange(5, 25)
         ran = ''.join(random.choices(string.ascii_uppercase + string.digits, k = string_length))
         self.proxy_socket.send_string(topic + " : " + str(ran))
+
+pub = Publisher()
+while True:
+    pub.put('fruit')
+    time.sleep(0.1)

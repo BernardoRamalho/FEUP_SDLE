@@ -24,6 +24,10 @@ poller = zmq.Poller()
 poller.register(frontend, zmq.POLLIN)
 poller.register(backend, zmq.POLLIN)
 
+# Create Dict to save topics
+topics = {} # Key --> topic name; Value --> topic object
+topics_key_view = topics.keys() # It will help check if a topic exists
+
 while True:
     # Wait for sockets to receive messages
     socks = dict(poller.poll())

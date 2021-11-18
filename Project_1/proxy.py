@@ -64,8 +64,8 @@ class Proxy:
 
     # Parse Messages comming from the frontend socket
     def parse_ft(self, message_bytes):
-        print("REQ Received: ")
-        print(message_bytes)
+        # print("REQ Received: ")
+        # print(message_bytes)
         message = message_bytes[2].decode('utf-8')
         reply = 'ERROR'
         
@@ -122,9 +122,20 @@ class Proxy:
                 result = loop.run_until_complete(self.topics[topic_name].add_message(message_content))
 
             reply = 'Saved'
-        
-        print("Trying to REPLY:")
-        print([message_bytes[0], b'', reply.encode('utf-8')])
+
+        # GET MESSAGE
+        elif message[0] == '\x03': #message is '\0x03topic_name sub_id'
+            topic_name, sub_id = message.replace(message[0], '').split()
+
+            if topic_name in self.topics_key_view:
+                topic = self.topics[topic_name]
+
+                topic_message = topic.get_message(sub_id)
+
+                reply = topic_name + '  ' + topic_message
+
+        # print("Trying to REPLY:")
+        # print([message_bytes[0], b'', reply.encode('utf-8')])
         self.frontend.send_multipart([message_bytes[0], b'', reply.encode('utf-8')])
 
 

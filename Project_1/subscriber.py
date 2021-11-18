@@ -52,17 +52,25 @@ class Subscriber:
 
         
     def get(self, topic):
-        message = str(self.id) + ' ' + topic
-        self.proxy_socket.send(message.encode('utf-8'))
-        response = self.proxy_socket.recv_multipart()
-        print('Client ' + str(self.id) + ' received: ' + response[0].decode('utf-8'))
+        # Send Request for a new Message froma topic
+        get_message = '\x03' + topic + ' ' + str(self.id)
+        self.proxy_socket.send(get_message.encode('utf-8'))
+
+        # Read and Parse the response
+        response_bytes = self.proxy_socket.recv_multipart()
+        print(response_bytes)
+        topic_received, topic_message = response_bytes[0].decode('utf-8').split()
+
+        if topic_received == topic:
+            print('Client ' + str(self.id) + ' received: ' + topic_message)
+        else:
+            print('Received message from other topic:')
+            print(response_bytes)
         #message = str(self.id) + ' received'
 
 sub = Subscriber(1)
 sub.subscribe('fruit')
-time.sleep(10)
+time.sleep(5)
+sub.get('fruit')
+time.sleep(5)
 sub.unsubscribe('fruit')
-
-# while True:
-#     #sub.get('fruit')
-#     time.sleep(0.1)

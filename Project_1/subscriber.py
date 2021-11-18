@@ -18,7 +18,7 @@ class Subscriber:
         # Create a Subscriber socket
         context = zmq.Context()
 
-        self.proxy_socket = context.socket(zmq.XSUB)
+        self.proxy_socket = context.socket(zmq.REQ)
         self.proxy_socket.connect('tcp://localhost:5555')
 
 
@@ -26,25 +26,51 @@ class Subscriber:
         # Subscribe to message of the given topic
         subs_message = '\x01' + topic + ' ' + str(self.id)
         self.proxy_socket.send(subs_message.encode('utf-8'))
-        print('Client ' + str(self.id) + ' subscribed to topic ' + topic)
+
+        # Receive Confirmation
+        response = self.proxy_socket.recv()
+
+        if(response.decode('utf-8') == 'subscribed ' + topic):
+            print('Client ' + str(self.id) + ' subscribed to topic ' + topic)
+        else:
+            print('Failed to subscribe to topic ' + topic)
 
     
     def unsubscribe(self, topic):
         # Unsubscribe to message of the given topic
-        unsub_message = '\x00' + topic
+        unsub_message = '\x00' + topic + ' ' + str(self.id)
         self.proxy_socket.send(unsub_message.encode('utf-8'))
-        print('Client ' + str(self.id) + ' unsubscribed to topic ' + topic)
+
+        # Receive Confirmation
+        response = self.proxy_socket.recv()
+
+        if(response.decode('utf-8') == 'unsubscribed ' + topic):
+            print('Client ' + str(self.id) + ' unsubscribed to topic ' + topic)
+
+        else:
+            print('Failed to unsubscribe to topic ' + topic)
 
         
     def get(self, topic):
-        message = str(self.id) + ' ' + topic
-        self.proxy_socket.send(message.encode('utf-8'))
-        response = self.proxy_socket.recv_multipart()
-        print('Client ' + str(self.id) + ' received: ' + response[0].decode('utf-8'))
+        # Send Request for a new Message froma topic
+        get_message = '\x03' + topic + ' ' + str(self.id)
+        self.proxy_socket.send(get_message.encode('utf-8'))
+
+        # Read and Parse the response
+        response_bytes = self.proxy_socket.recv_multipart()
+        print(response_bytes)
+        topic_received, topic_message = response_bytes[0].decode('utf-8').split()
+
+        if topic_received == topic:
+            print('Client ' + str(self.id) + ' received: ' + topic_message)
+        else:
+            print('Received message from other topic:')
+            print(response_bytes)
         #message = str(self.id) + ' received'
 
 sub = Subscriber(1)
 sub.subscribe('fruit')
-while True:
-    #sub.get('fruit')
-    time.sleep(0.1)
+time.sleep(5)
+sub.get('fruit')
+time.sleep(5)
+sub.unsubscribe('fruit')

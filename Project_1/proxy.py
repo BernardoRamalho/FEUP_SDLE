@@ -17,7 +17,7 @@ class Proxy:
         # Create XPUB and XSUB sockets
         context = zmq.Context()
 
-        self.frontend = context.socket(zmq.XPUB)
+        self.frontend = context.socket(zmq.ROUTER)
         self.frontend.bind("tcp://*:5555")
 
         self.backend = context.socket(zmq.XSUB)
@@ -50,7 +50,7 @@ class Proxy:
             if socks.get(self.frontend) == zmq.POLLIN:
                 message = self.frontend.recv_multipart()
 
-                self.parse_ft(message)
+                self.executor.submit(self.parse_ft(message))
 
             if socks.get(self.backend) == zmq.POLLIN:
                 message = self.backend.recv_multipart()
@@ -64,8 +64,12 @@ class Proxy:
 
     # Parse Messages comming from the frontend socket
     def parse_ft(self, message_bytes):
-        message = message_bytes[0].decode('utf-8')
-            
+        # print("REQ Received: ")
+        # print(message_bytes)
+        message = message_bytes[2].decode('utf-8')
+        reply = 'ERROR'
+        
+        # SUB MESSAGE
         if message[0] == '\x01': # message is '\x01topic_name sub_id'
             topic_name, sub_id = message.replace(message[0], '').split()
             
@@ -77,12 +81,12 @@ class Proxy:
                 new_topic = Topic(topic_name)
                 new_topic.add_sub(sub_id)
 
-                # Send message to the socket telling that a new topic was created
-                self.backend.send_string('\x01' + topic_name)
-
                 # Add new topic to dict
                 self.topics[topic_name] = new_topic
+            
+            reply = 'subscribed ' + topic_name
 
+        # UNSUB MESSAGE
         elif message[0] == '\x00': # message is '\x00topic_name sub_id'
             topic_name, sub_id = message.replace(message[0], '').split()
             
@@ -92,9 +96,48 @@ class Proxy:
                 if len(self.topics[topic_name].subs) == 0:
                     del self.topics[topic_name]
                     print("Topic " + topic_name + " deleted because no client subscribed to it.")
+            
+            reply = 'unsubscribed ' + topic_name
 
-                    # Send message to the socket telling that a topic was deleted
-                    self.backend.send_string('\x00' + topic_name)
+        # PUT MESSAGE
+        elif message[0] == '\x02': # message is '\x02topic_name message' 
+            topic_name, message_content = message.replace(message[0], '').split()
+
+            if topic_name in self.topics_key_view:
+                # Add Message to Topic
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                result = loop.run_until_complete(self.topics[topic_name].add_message(message_content))
+
+            else:
+                # Create new topic
+                new_topic = Topic(topic_name)
+
+                # Add new topic to dict
+                self.topics[topic_name] = new_topic
+
+                # Add Message to Topic
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                result = loop.run_until_complete(self.topics[topic_name].add_message(message_content))
+
+            reply = 'Saved'
+
+        # GET MESSAGE
+        elif message[0] == '\x03': #message is '\0x03topic_name sub_id'
+            topic_name, sub_id = message.replace(message[0], '').split()
+
+            if topic_name in self.topics_key_view:
+                topic = self.topics[topic_name]
+
+                topic_message = topic.get_message(sub_id)
+
+                reply = topic_name + '  ' + topic_message
+
+        # print("Trying to REPLY:")
+        # print([message_bytes[0], b'', reply.encode('utf-8')])
+        self.frontend.send_multipart([message_bytes[0], b'', reply.encode('utf-8')])
+
 
     # Parse Messages comming from the backend socket
     # Messages from the backend are in the form of 'topic_name : message_content'

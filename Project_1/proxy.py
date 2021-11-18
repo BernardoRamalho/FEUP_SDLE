@@ -50,7 +50,7 @@ class Proxy:
             if socks.get(self.frontend) == zmq.POLLIN:
                 message = self.frontend.recv_multipart()
 
-                self.parse_ft(message)
+                self.executor.submit(self.parse_ft(message))
 
             if socks.get(self.backend) == zmq.POLLIN:
                 message = self.backend.recv_multipart()

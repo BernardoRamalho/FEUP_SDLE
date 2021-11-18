@@ -64,3 +64,7 @@ class Topic:
 
         self.subs.remove(sub_id)
         self.subs_last_message.pop(sub_id)
+
+    def print_info(self):
+        print(self.messages)
+        print(self.subs)

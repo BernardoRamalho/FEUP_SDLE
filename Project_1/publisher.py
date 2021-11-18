@@ -16,8 +16,8 @@ class Publisher:
     def __init__(self) -> None:
         # Create Publisher Socket
         context = zmq.Context()
-        self.proxy_socket = context.socket(zmq.XPUB) # TODO: testar XPUB
-        self.proxy_socket.connect('tcp://localhost:5560')
+        self.proxy_socket = context.socket(zmq.REQ)
+        self.proxy_socket.connect('tcp://localhost:5555')
 
     def put(self, topic):
         # Send Message
@@ -26,8 +26,8 @@ class Publisher:
         print("Sent: " + topic + " : " + message)
 
         # Wait for Confirmation
-        message = self.proxy_socket.recv_multipart()
-        if(message[0].decode('utf-8') != 'Saved'):
+        message = self.proxy_socket.recv()
+        if(message.decode('utf-8') != 'Saved'):
             print("Message not delivered")
             return
         print("Message Saved")

@@ -17,7 +17,7 @@ class Proxy:
         # Create XPUB and XSUB sockets
         context = zmq.Context()
 
-        self.frontend = context.socket(zmq.XPUB)
+        self.frontend = context.socket(zmq.ROUTER)
         self.frontend.bind("tcp://*:5555")
 
         self.backend = context.socket(zmq.XSUB)
@@ -64,8 +64,10 @@ class Proxy:
 
     # Parse Messages comming from the frontend socket
     def parse_ft(self, message_bytes):
-        message = message_bytes[0].decode('utf-8')
-            
+        print("REQ Received: ")
+        print(message_bytes)
+        message = message_bytes[2].decode('utf-8')
+        reply = 'ERROR'
         if message[0] == '\x01': # message is '\x01topic_name sub_id'
             topic_name, sub_id = message.replace(message[0], '').split()
             
@@ -77,11 +79,10 @@ class Proxy:
                 new_topic = Topic(topic_name)
                 new_topic.add_sub(sub_id)
 
-                # Send message to the socket telling that a new topic was created
-                self.backend.send_string('\x01' + topic_name)
-
                 # Add new topic to dict
                 self.topics[topic_name] = new_topic
+            
+            reply = 'subscribed ' + topic_name
 
         elif message[0] == '\x00': # message is '\x00topic_name sub_id'
             topic_name, sub_id = message.replace(message[0], '').split()
@@ -92,9 +93,12 @@ class Proxy:
                 if len(self.topics[topic_name].subs) == 0:
                     del self.topics[topic_name]
                     print("Topic " + topic_name + " deleted because no client subscribed to it.")
+            
+            reply = 'unsubscribed ' + topic_name
+        print("Trying to REPLY:")
+        print([message_bytes[0], b'', reply.encode('utf-8')])
+        self.frontend.send_multipart([message_bytes[0], b'', reply.encode('utf-8')])
 
-                    # Send message to the socket telling that a topic was deleted
-                    self.backend.send_string('\x00' + topic_name)
 
     # Parse Messages comming from the backend socket
     # Messages from the backend are in the form of 'topic_name : message_content'

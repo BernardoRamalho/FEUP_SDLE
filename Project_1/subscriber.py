@@ -18,7 +18,7 @@ class Subscriber:
         # Create a Subscriber socket
         context = zmq.Context()
 
-        self.proxy_socket = context.socket(zmq.XSUB)
+        self.proxy_socket = context.socket(zmq.REQ)
         self.proxy_socket.connect('tcp://localhost:5555')
 
 
@@ -26,14 +26,29 @@ class Subscriber:
         # Subscribe to message of the given topic
         subs_message = '\x01' + topic + ' ' + str(self.id)
         self.proxy_socket.send(subs_message.encode('utf-8'))
-        print('Client ' + str(self.id) + ' subscribed to topic ' + topic)
+
+        # Receive Confirmation
+        response = self.proxy_socket.recv()
+
+        if(response.decode('utf-8') == 'subscribed ' + topic):
+            print('Client ' + str(self.id) + ' subscribed to topic ' + topic)
+        else:
+            print('Failed to subscribe to topic ' + topic)
 
     
     def unsubscribe(self, topic):
         # Unsubscribe to message of the given topic
-        unsub_message = '\x00' + topic
+        unsub_message = '\x00' + topic + ' ' + str(self.id)
         self.proxy_socket.send(unsub_message.encode('utf-8'))
-        print('Client ' + str(self.id) + ' unsubscribed to topic ' + topic)
+
+        # Receive Confirmation
+        response = self.proxy_socket.recv()
+
+        if(response.decode('utf-8') == 'unsubscribed ' + topic):
+            print('Client ' + str(self.id) + ' unsubscribed to topic ' + topic)
+
+        else:
+            print('Failed to unsubscribe to topic ' + topic)
 
         
     def get(self, topic):
@@ -45,6 +60,9 @@ class Subscriber:
 
 sub = Subscriber(1)
 sub.subscribe('fruit')
-while True:
-    #sub.get('fruit')
-    time.sleep(0.1)
+time.sleep(10)
+sub.unsubscribe('fruit')
+
+# while True:
+#     #sub.get('fruit')
+#     time.sleep(0.1)

@@ -21,9 +21,10 @@ class Publisher:
 
     def put(self, topic):
         # Send Message
-        message = self.create_random_string()
-        self.proxy_socket.send_string(topic + " : " + message)
-        print("Sent: " + topic + " : " + message)
+        put_message = '\x02' + topic + ' ' + self.create_random_string()
+
+        self.proxy_socket.send(put_message.encode('utf-8'))
+        print("Sent: " + put_message)
 
         # Wait for Confirmation
         message = self.proxy_socket.recv()

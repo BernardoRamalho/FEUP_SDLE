@@ -68,6 +68,8 @@ class Proxy:
         print(message_bytes)
         message = message_bytes[2].decode('utf-8')
         reply = 'ERROR'
+        
+        # SUB MESSAGE
         if message[0] == '\x01': # message is '\x01topic_name sub_id'
             topic_name, sub_id = message.replace(message[0], '').split()
             
@@ -84,6 +86,7 @@ class Proxy:
             
             reply = 'subscribed ' + topic_name
 
+        # UNSUB MESSAGE
         elif message[0] == '\x00': # message is '\x00topic_name sub_id'
             topic_name, sub_id = message.replace(message[0], '').split()
             
@@ -95,6 +98,31 @@ class Proxy:
                     print("Topic " + topic_name + " deleted because no client subscribed to it.")
             
             reply = 'unsubscribed ' + topic_name
+
+        # PUT MESSAGE
+        elif message[0] == '\x02': # message is '\x02topic_name message' 
+            topic_name, message_content = message.replace(message[0], '').split()
+
+            if topic_name in self.topics_key_view:
+                # Add Message to Topic
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                result = loop.run_until_complete(self.topics[topic_name].add_message(message_content))
+
+            else:
+                # Create new topic
+                new_topic = Topic(topic_name)
+
+                # Add new topic to dict
+                self.topics[topic_name] = new_topic
+
+                # Add Message to Topic
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                result = loop.run_until_complete(self.topics[topic_name].add_message(message_content))
+
+            reply = 'Saved'
+        
         print("Trying to REPLY:")
         print([message_bytes[0], b'', reply.encode('utf-8')])
         self.frontend.send_multipart([message_bytes[0], b'', reply.encode('utf-8')])

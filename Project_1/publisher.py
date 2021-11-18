@@ -29,6 +29,8 @@ class Publisher:
         message = self.proxy_socket.recv_multipart()
         if(message[0].decode('utf-8') != 'Saved'):
             print("Message not delivered")
+            return
+        print("Message Saved")
 
     def create_random_string(self):
         string_length = random.randrange(5, 25)

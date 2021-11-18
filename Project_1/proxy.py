@@ -108,6 +108,7 @@ class Proxy:
 
         # Tell publisher message was saved
         self.backend.send(b'Saved')
+        print("Message Saved")
         
 
 

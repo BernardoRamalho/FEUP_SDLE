@@ -59,7 +59,7 @@ class Proxy:
     # Parse Messages comming from the frontend socket
     def parse_ft(self, message_bytes):
         message = message_bytes[2].decode('utf-8')
-        reply = 'ERROR'
+        reply = 'ERROR: Incorret Message Format. Message received: ' + message
         
         # SUB MESSAGE
         if message[0] == '\x01': # message is '\x01topic_name sub_id'
@@ -101,19 +101,10 @@ class Proxy:
                 asyncio.set_event_loop(loop)
                 result = loop.run_until_complete(self.topics[topic_name].add_message(message_content))
 
+                reply = 'Saved'
+            
             else:
-                # Create new topic
-                new_topic = Topic(topic_name)
-
-                # Add new topic to dict
-                self.topics[topic_name] = new_topic
-
-                # Add Message to Topic
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                result = loop.run_until_complete(self.topics[topic_name].add_message(message_content))
-
-            reply = 'Saved'
+                reply = 'ERROR: No subscriber exists for topic ' + topic_name + '.'
 
         # GET MESSAGE
         elif message[0] == '\x03': #message is '\x03topic_name sub_id'

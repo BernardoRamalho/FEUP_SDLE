@@ -22,8 +22,11 @@ class Topic:
 
     # Removes all messages that have already been sent
     def remove_message(self):
-        first_message_id = min(list(self.messages_stored_view))
-        subs_last_mesage_id = min(list(self.last_message_view))
+        if len(self.messages_stored_view) == 0:
+            return
+            
+        first_message_id = min(self.messages_stored_view)
+        subs_last_mesage_id = min(self.last_message_view)
 
         if first_message_id < subs_last_mesage_id:
             self.messages.pop(first_message_id)
@@ -34,7 +37,7 @@ class Topic:
         if sub_id not in self.subs:
             print('Subscriber not subscribed to topic ' + self.name)
             return "Error"
-            
+
         message_id = self.subs_last_message[sub_id]
 
         if message_id == self.num_msg:
@@ -43,7 +46,7 @@ class Topic:
 
         self.subs_last_message[sub_id] = message_id + 1
         message = self.messages[message_id]
-
+        print('Got message: ' + message)
         self.remove_message()
         print(self.messages)
         print(self.subs_last_message)

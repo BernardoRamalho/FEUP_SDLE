@@ -71,18 +71,24 @@ class Subscriber:
             print(response_bytes)
         
 
-# Script in run "subscriber.py id topic_name n_gets time_between_gets"
+# Script in run "subscriber.py id topic_name [n_gets] [time_between_gets]"
 arguments = sys.argv[1:]
 
 if len(arguments) > 4 or len(arguments) < 2:
-    print("Numbers of arguments is not corret. Script is run as 'subscriber.py id topic_name n_gets'. n_gets is optional.")
+    print("Numbers of arguments is not corret. Script is run as 'subscriber.py id topic_name [n_gets] [time_between_gets]'.")
     sys.exit(0)
 
-# Check if there is any wait time between gets
 wait = False
 
+# Check if there is any wait time between gets
 if len(arguments) == 4:
     wait = True
+
+    # Check if user inputed a correct value
+    if not arguments[3].isdigit():
+        print("Error in arguments. Value was not a digit for time_between_gets. Script is run as 'subscriber.py id topic_name [n_gets] [time_between_gets]")
+        sys.exit(0)
+
     time_to_wait = int(arguments[3])
 
 sub = Subscriber(arguments[0])

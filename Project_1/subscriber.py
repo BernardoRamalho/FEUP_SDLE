@@ -71,12 +71,19 @@ class Subscriber:
             print(response_bytes)
         
 
-# Script in run "subscriber.py id topic_name n_gets"
+# Script in run "subscriber.py id topic_name n_gets time_between_gets"
 arguments = sys.argv[1:]
 
-if len(arguments) > 3 or len(arguments) < 2:
+if len(arguments) > 4 or len(arguments) < 2:
     print("Numbers of arguments is not corret. Script is run as 'subscriber.py id topic_name n_gets'. n_gets is optional.")
     sys.exit(0)
+
+# Check if there is any wait time between gets
+wait = False
+
+if len(arguments) == 4:
+    wait = True
+    time_to_wait = int(arguments[3])
 
 sub = Subscriber(arguments[0])
 
@@ -85,8 +92,17 @@ sub.subscribe(arguments[1])
 if len(arguments) == 2:
     while True:
         sub.get(arguments[1])
-elif len(arguments) == 3:
+
+        if wait:
+            print("Waiting before next get...")
+            time.sleep(time_to_wait)
+else:
     for x in range(int(arguments[2])):
         sub.get(arguments[1])
+
+        if wait:
+            print("Waiting before next get...")
+            time.sleep(time_to_wait)
+        
 
 sub.unsubscribe('fruit')

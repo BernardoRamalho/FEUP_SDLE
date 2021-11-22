@@ -13,15 +13,17 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 class Publisher:
-    def __init__(self) -> None:
+    def __init__(self, topic_name) -> None:
+        self.topic = topic_name
+
         # Create Publisher Socket
         context = zmq.Context()
         self.proxy_socket = context.socket(zmq.REQ)
         self.proxy_socket.connect('tcp://localhost:5555')
 
-    def put(self, topic):
+    def put(self):
         # Send Message
-        put_message = '\x02' + topic + ' ' + self.create_random_string()
+        put_message = '\x02' + self.topic + ' ' + self.create_random_string()
 
         self.proxy_socket.send(put_message.encode('utf-8'))
         print("Sent: " + put_message)
@@ -39,7 +41,15 @@ class Publisher:
 
         return str(ran)
 
-pub = Publisher()
-for i in range(10):
-    pub.put('fruit')
-    time.sleep(0.1)
+# Script is run "publisher.py topic_name n_puts"
+arguments = sys.argv[1:]
+
+if len(arguments) != 2:
+    print("Numbers of arguments is not corret. Script is run as 'publisher.py topic_name n_puts'.")
+    sys.exit(0)
+
+pub = Publisher(arguments[0])
+
+for i in range(int(arguments[1])):
+    pub.put()
+

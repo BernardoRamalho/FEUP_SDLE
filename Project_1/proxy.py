@@ -2,6 +2,9 @@ import zmq
 import signal
 import sys
 import asyncio
+import json
+import time
+import os
 from auxClasses import Topic
 from concurrent.futures import ThreadPoolExecutor
 
@@ -20,13 +23,9 @@ class Proxy:
         self.frontend = context.socket(zmq.ROUTER)
         self.frontend.bind("tcp://*:5555")
 
-        self.backend = context.socket(zmq.XSUB)
-        self.backend.bind("tcp://*:5560")
-
         # Create Poller to handle the messages
         self.poller = zmq.Poller()
         self.poller.register(self.frontend, zmq.POLLIN)
-        self.poller.register(self.backend, zmq.POLLIN)
 
         # Create Dict to save topics
         self.topics = {} # Key --> topic name; Value --> topic object
@@ -34,6 +33,7 @@ class Proxy:
 
         # Create ThreadPoolExecutor for multi threading
         self.executor = ThreadPoolExecutor(max_workers=25)
+        self.executor.submit(self.save_json)
 
     # Main loop of the proxy
     def run(self):
@@ -50,16 +50,10 @@ class Proxy:
             if socks.get(self.frontend) == zmq.POLLIN:
                 message = self.frontend.recv_multipart()
 
-                self.executor.submit(self.parse_ft(message))
-
-            if socks.get(self.backend) == zmq.POLLIN:
-                message = self.backend.recv_multipart()
-   
-                self.executor.submit(self.parse_bck(message))
+                self.executor.submit(self.parse_ft, message)
 
         # We never reach this code
         self.frontend.close()
-        self.backend.close()
         self.context.term()
 
     # Parse Messages comming from the frontend socket
@@ -124,15 +118,22 @@ class Proxy:
             reply = 'Saved'
 
         # GET MESSAGE
-        elif message[0] == '\x03': #message is '\0x03topic_name sub_id'
+        elif message[0] == '\x03': #message is '\x03topic_name sub_id'
             topic_name, sub_id = message.replace(message[0], '').split()
 
             if topic_name in self.topics_key_view:
                 topic = self.topics[topic_name]
-
+ 
                 topic_message = topic.get_message(sub_id)
 
+                if topic_message == 'Null':
+                    print("Waiting for message...")
+                    time.sleep(2)
+                    self.parse_ft(message_bytes)
+                    
                 reply = topic_name + '  ' + topic_message
+            else:
+                reply = topic_name + ' none'
 
         # print("Trying to REPLY:")
         # print([message_bytes[0], b'', reply.encode('utf-8')])
@@ -141,20 +142,34 @@ class Proxy:
 
     # Parse Messages comming from the backend socket
     # Messages from the backend are in the form of 'topic_name : message_content'
-    def parse_bck(self, message_bytes):
-        topic_name, message_content = message_bytes[0].decode('utf-8').split(' : ')
+    def save_json(self):
+        if len(self.topics) == 0:
+            if os.path.exists('data.txt'):
+                os.remove('data.txt')
 
-        # Add Message to Topic
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        result = loop.run_until_complete(self.topics[topic_name].add_message(message_content))
+            print('Nothing to Save.')
+            time.sleep(10)
+            self.save_json()
 
-        # Tell publisher message was saved
-        self.backend.send(b'Saved')
-        print("Message Saved")
-        
+        data = {}
+        data['topic'] = []
+        for key in self.topics:
+            topic = self.topics[key]
 
+            data['topic'].append({
+            'name': topic.name,
+            'n_msg': topic.num_msg,
+            'subs': topic.subs,
+            'messages': topic.messages,
+            'subs_last_message': topic.subs_last_message
+            })
 
+        with open('data.txt', 'w') as outfile:
+            json.dump(data, outfile)
+
+        print('Data Saved')
+        time.sleep(10)
+        self.save_json()
 
 proxy = Proxy()
 proxy.run()

@@ -21,7 +21,6 @@ class Subscriber:
         self.proxy_socket = context.socket(zmq.REQ)
         self.proxy_socket.connect('tcp://localhost:5555')
 
-
     def subscribe(self, topic):
         # Subscribe to message of the given topic
         subs_message = '\x01' + topic + ' ' + str(self.id)
@@ -60,17 +59,34 @@ class Subscriber:
         response_bytes = self.proxy_socket.recv_multipart()
         print(response_bytes)
         topic_received, topic_message = response_bytes[0].decode('utf-8').split()
+        
+        if topic_message == 'none':
+            print('No messae of that topic.')
+            # Deve este get nao contar como um verdadeiro get?
 
         if topic_received == topic:
             print('Client ' + str(self.id) + ' received: ' + topic_message)
         else:
             print('Received message from other topic:')
             print(response_bytes)
-        #message = str(self.id) + ' received'
+        
 
-sub = Subscriber(1)
-sub.subscribe('fruit')
-time.sleep(5)
-sub.get('fruit')
-time.sleep(5)
+# Script in run "subscriber.py id topic_name n_gets"
+arguments = sys.argv[1:]
+
+if len(arguments) > 3 or len(arguments) < 2:
+    print("Numbers of arguments is not corret. Script is run as 'subscriber.py id topic_name n_gets'. n_gets is optional.")
+    sys.exit(0)
+
+sub = Subscriber(arguments[0])
+
+sub.subscribe(arguments[1])
+
+if len(arguments) == 2:
+    while True:
+        sub.get(arguments[1])
+elif len(arguments) == 3:
+    for x in range(int(arguments[2])):
+        sub.get(arguments[1])
+
 sub.unsubscribe('fruit')

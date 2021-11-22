@@ -31,11 +31,14 @@ class Topic:
 
     # Retrieves a message to send to a subscriber
     def get_message(self, sub_id):
-        print(self.messages)
-        print(self.subs_last_message)
+        if sub_id not in self.subs:
+            print('Subscriber not subscribed to topic ' + self.name)
+            return "Error"
+            
         message_id = self.subs_last_message[sub_id]
 
-        if  int(message_id) > max(list(self.messages_stored_view)):
+        if message_id == self.num_msg:
+            print("No message for subscriber.")
             return "Null"
 
         self.subs_last_message[sub_id] = message_id + 1

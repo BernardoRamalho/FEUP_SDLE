@@ -124,6 +124,9 @@ class Proxy:
         self.topics = {} # Key --> topic name; Value --> topic object
         self.topics_key_view = self.topics.keys() # It will help check if a topic exists
 
+        if os.path.exists('data.txt'):
+            self.read_json()
+
         # Create ThreadPoolExecutor for multi threading
         self.executor = ThreadPoolExecutor(max_workers=25)
         self.executor.submit(self.save_json)
@@ -250,19 +253,27 @@ class Proxy:
         time.sleep(10)
         self.save_json()
 
+    def read_json(self):
+        with open('data.txt') as json_file:
+            data = json.load(json_file)
+            for t in data['topic']:
+                new_topic = Topic(t['name'], t['n_msg'], t['subs'], {int(k):v for k,v in t['messages'].items()}, t['subs_last_message'])
+                self.topics[new_topic.name] = new_topic
+
+
 # Class Topic
 # Represents a topic created when a subscriber subscribes to a given topic.
 # Hold every information necessary to maintain the integraty of the messages and the order in which they are sented/received
 class Topic:
-    def __init__(self, name) -> None:
+    def __init__(self, name, n_msg = 0, subs =  [], messages = {}, subs_last_message = {}) -> None:
         # Topic ID
         self.name = name
-        self.num_msg = 0
+        self.num_msg = n_msg
 
         # Arrays/Dictionary to save information about the topic
-        self.subs = []
-        self.messages = {} # Key --> message ID; Value --> Message content
-        self.subs_last_message = {} # Key --> sub ID; Value --> Message ID
+        self.subs = subs
+        self.messages = messages # Key --> message ID; Value --> Message content
+        self.subs_last_message = subs_last_message # Key --> sub ID; Value --> Message ID
 
         # Views to help to analyse the dictionaries
         self.messages_stored_view = self.messages.keys()
@@ -280,7 +291,7 @@ class Topic:
         # No messages means nothing can be removed
         if len(self.messages_stored_view) == 0:
             return
-
+        
         # Values that will tell if a subscriber is waiting for the oldest message avaialble
         first_message_id = min(self.messages_stored_view)
         subs_last_mesage_id = min(self.last_message_view)
@@ -299,7 +310,7 @@ class Topic:
 
         # Get message id corresponding to the subscriber
         message_id = self.subs_last_message[sub_id]
-
+        print(message_id)
         # message_id is only equal to num_msg when a subscriber as just subscribed to this topic
         if message_id == self.num_msg:
             print("No message for subscriber.")
@@ -308,7 +319,7 @@ class Topic:
         # Update values related to this sub
         self.subs_last_message[sub_id] = message_id + 1
         message = self.messages[message_id]
-        
+
         # Check if any subscribers are waiting for this message, if not remove it
         self.remove_message()
 

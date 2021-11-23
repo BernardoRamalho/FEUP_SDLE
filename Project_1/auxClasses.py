@@ -5,6 +5,7 @@ import asyncio
 import json
 import time
 import os
+import sys
 from concurrent.futures import ThreadPoolExecutor
 
 # Class Subscriber
@@ -14,6 +15,7 @@ class Subscriber:
     def __init__(self, id) -> None:
         # Subscriber Basic Info
         self.id = id
+        self.last_msg_received = -1
 
         # Create a Subscriber socket
         context = zmq.Context()
@@ -50,24 +52,35 @@ class Subscriber:
 
         
     def get(self, topic):
-        # Send Request for a new Message froma topic
-        get_message = '\x03' + topic + ' ' + str(self.id)
+        # Send Request for a new Message from a topic
+        get_message = '\x03' + topic + ' ' + str(self.id) + ' ' + str(self.last_msg_received)
         self.proxy_socket.send(get_message.encode('utf-8'))
 
         # Read and Parse the response
         response_bytes = self.proxy_socket.recv_multipart()
 
-        topic_received, topic_message = response_bytes[0].decode('utf-8').split()
+        topic_received, topic_message, message_id = response_bytes[0].decode('utf-8').split()
         
         if topic_message == 'none':
             print("Topic " + topic + " doesn't exist.")
 
         if topic_received == topic:
             print('Client ' + str(self.id) + ' received: ' + topic_message)
+            self.last_msg_received = message_id
+
+            # Send Ack
+            ack_message = '\x04' + topic + ' ' + str(self.id) + ' ' + str(self.last_msg_received)
+            print('Sent ack: ' + ack_message)
+            self.proxy_socket.send(ack_message.encode('utf-8'))
+
+            # Receive Ack Response
+            self.proxy_socket.recv_multipart()
+            print('Received ACK response')
+
         else:
             print('Received message from other topic:')
             print(response_bytes)
-        
+
 # Class Publisher
 # Creates and publishes random messages about a topic given
 class Publisher:
@@ -109,7 +122,14 @@ class Publisher:
 # Messages from Publishers are saved in their designated Topic.
 # Messages are taken from a designated Topic and sent to Subscribers after a get() call.
 class Proxy:
-    def __init__(self) -> None:
+    def __init__(self, time_between_saves) -> None:
+        # Check if args are correct
+        if not time_between_saves.isdigit():
+            print("Argument given is not a digit.")
+            sys.exit(1)
+
+        time_between_saves = float(time_between_saves)
+
         # Create XPUB and XSUB sockets
         context = zmq.Context()
 
@@ -124,12 +144,12 @@ class Proxy:
         self.topics = {} # Key --> topic name; Value --> topic object
         self.topics_key_view = self.topics.keys() # It will help check if a topic exists
 
-        if os.path.exists('data.txt'):
+        if os.path.exists('proxy_info.txt'):
             self.read_json()
 
         # Create ThreadPoolExecutor for multi threading
         self.executor = ThreadPoolExecutor(max_workers=25)
-        self.executor.submit(self.save_json)
+        self.executor.submit(self.save_json, time_between_saves)
 
     # Main loop of the proxy
     def run(self):
@@ -201,13 +221,13 @@ class Proxy:
 
         # GET MESSAGE
         elif message[0] == '\x03': #message is '\x03topic_name sub_id'
-            topic_name, sub_id = message.replace(message[0], '').split()
+            topic_name, sub_id, last_message_received = message.replace(message[0], '').split()
 
             if topic_name in self.topics_key_view:
                 # Get message from the topic
                 topic = self.topics[topic_name]
- 
-                topic_message = topic.get_message(sub_id)
+
+                topic_message = topic.get_message(sub_id, int(last_message_received))
 
                 # If its Null, it means the subscriber has no message to receive
                 if topic_message == 'Null':
@@ -218,20 +238,33 @@ class Proxy:
                 reply = topic_name + '  ' + topic_message
             else:
                 reply = topic_name + ' none'
+        
+        # ACK MESSAGE
+        elif message[0] == '\x04':
+            topic_name, sub_id, last_message_received = message.replace(message[0], '').split()
+
+            if topic_name in self.topics_key_view:
+                # Update Topic Values for Sub
+                topic = self.topics[topic_name]
+
+                topic.update_sub_status(sub_id, last_message_received)
+
+                reply = topic_name + ' ackReceived'
 
         self.frontend.send_multipart([message_bytes[0], b'', reply.encode('utf-8')])
 
 
     # Save all the infomration in a JSON
     # The JSON is then read in case of a crash to retrieve all the information
-    def save_json(self):
+    def save_json(self, time_between_save):
         if len(self.topics) == 0:
-            if os.path.exists('data.txt'):
-                os.remove('data.txt')
+            if os.path.exists('proxy_info.txt'):
+                os.remove('proxy_info.txt')
 
             print('Nothing to Save.')
-            time.sleep(10)
-            self.save_json()
+
+            time.sleep(time_between_save)
+            self.save_json(time_between_save)
 
         data = {}
         data['topic'] = []
@@ -243,29 +276,28 @@ class Proxy:
             'n_msg': topic.num_msg,
             'subs': topic.subs,
             'messages': topic.messages,
-            'subs_last_message': topic.subs_last_message
+            'subs_next_message': topic.subs_next_message
             })
 
-        with open('data.txt', 'w') as outfile:
+        with open('proxy_info.txt', 'w') as outfile:
             json.dump(data, outfile)
 
         print('Data Saved')
-        time.sleep(10)
-        self.save_json()
+        time.sleep(time_between_save)
+        self.save_json(time_between_save)
 
     def read_json(self):
-        with open('data.txt') as json_file:
+        with open('proxy_info.txt') as json_file:
             data = json.load(json_file)
             for t in data['topic']:
-                new_topic = Topic(t['name'], t['n_msg'], t['subs'], {int(k):v for k,v in t['messages'].items()}, t['subs_last_message'])
+                new_topic = Topic(t['name'], t['n_msg'], t['subs'], {int(k):v for k,v in t['messages'].items()}, t['subs_next_message'])
                 self.topics[new_topic.name] = new_topic
-
 
 # Class Topic
 # Represents a topic created when a subscriber subscribes to a given topic.
 # Hold every information necessary to maintain the integraty of the messages and the order in which they are sented/received
 class Topic:
-    def __init__(self, name, n_msg = 0, subs =  [], messages = {}, subs_last_message = {}) -> None:
+    def __init__(self, name, n_msg = 0, subs =  [], messages = {}, subs_next_message = {}) -> None:
         # Topic ID
         self.name = name
         self.num_msg = n_msg
@@ -273,11 +305,11 @@ class Topic:
         # Arrays/Dictionary to save information about the topic
         self.subs = subs
         self.messages = messages # Key --> message ID; Value --> Message content
-        self.subs_last_message = subs_last_message # Key --> sub ID; Value --> Message ID
+        self.subs_next_message = subs_next_message # Key --> sub ID; Value --> Message ID
 
         # Views to help to analyse the dictionaries
         self.messages_stored_view = self.messages.keys()
-        self.last_message_view = self.subs_last_message.values()
+        self.last_message_view = self.subs_next_message.values()
 
         print('Topic ' + name + ' created successfully!')
 
@@ -303,29 +335,36 @@ class Topic:
             return self.remove_message()
 
     # Retrieves a message to send to a subscriber
-    def get_message(self, sub_id):
+    def get_message(self, sub_id, last_message_received):
         if sub_id not in self.subs:
             print('Subscriber not subscribed to topic ' + self.name)
             return "Error"
 
         # Get message id corresponding to the subscriber
-        message_id = self.subs_last_message[sub_id]
-        print(message_id)
+        message_id = self.subs_next_message[sub_id]
+
+        if not (last_message_received == -1) and (last_message_received + 1) != message_id:
+            self.subs_next_message[sub_id] = last_message_received
+            message_id = last_message_received + 1
+
         # message_id is only equal to num_msg when a subscriber as just subscribed to this topic
         if message_id == self.num_msg:
             print("No message for subscriber.")
             return "Null"
 
-        # Update values related to this sub
-        self.subs_last_message[sub_id] = message_id + 1
+        # Get Message
         message = self.messages[message_id]
+
+        return message + ' ' + str(message_id)
+
+    def update_sub_status(self, sub_id, last_message_received):
+        # Update values related to this sub
+        self.subs_next_message[sub_id] = int(last_message_received) + 1
 
         # Check if any subscribers are waiting for this message, if not remove it
         self.remove_message()
 
-        return message
-
-
+        
     # Add a subscriber to this topic
     def add_sub(self, sub_id):
         if sub_id in self.subs:
@@ -333,7 +372,7 @@ class Topic:
             return
 
         self.subs.append(sub_id)
-        self.subs_last_message[sub_id] = self.num_msg
+        self.subs_next_message[sub_id] = self.num_msg
 
     # Remove a subscriber to this topic
     def remove_sub(self, sub_id):
@@ -342,4 +381,4 @@ class Topic:
             return
 
         self.subs.remove(sub_id)
-        self.subs_last_message.pop(sub_id)
+        self.subs_next_message.pop(sub_id)

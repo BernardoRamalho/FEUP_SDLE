@@ -28,7 +28,7 @@ if len(arguments) == 4:
         print("Error in arguments. Value was not a digit for time_between_gets. Script is run as 'subscriber.py id topic_name [n_gets] [time_between_gets]")
         sys.exit(0)
 
-    time_to_wait = int(arguments[3])
+    time_to_wait = float(arguments[3])
 
 sub = Subscriber(arguments[0])
 

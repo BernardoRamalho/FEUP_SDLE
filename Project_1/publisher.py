@@ -30,7 +30,7 @@ if len(arguments) == 3:
         print("Error in arguments. Value was not a digit for time_between_puts. Script is run as 'publisher.py topic_name n_puts [time_between_puts]'.")
         sys.exit(0)
 
-    time_to_wait = int(arguments[2])
+    time_to_wait = float(arguments[2])
 
 while pub.num_put_message != int(arguments[1]):
     pub.put()

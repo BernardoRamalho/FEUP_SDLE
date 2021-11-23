@@ -9,5 +9,8 @@ def signal_handler(sig, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
-proxy = Proxy()
+# Script is run "proxy.py time_between_save"
+arguments = sys.argv[1:]
+
+proxy = Proxy(arguments[0])
 proxy.run()

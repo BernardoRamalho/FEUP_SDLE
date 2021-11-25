@@ -16,6 +16,10 @@ class Subscriber:
         # Subscriber Basic Info
         self.id = id
         self.last_msg_received = -1
+        self.file_title = 'client_' + self.id + '.txt'
+
+        if os.path.exists(self.file_title):
+            self.read_json()
 
         # Create a Subscriber socket
         context = zmq.Context()
@@ -40,12 +44,15 @@ class Subscriber:
         # Unsubscribe to message of the given topic
         unsub_message = '\x00' + topic + ' ' + str(self.id)
         self.proxy_socket.send(unsub_message.encode('utf-8'))
-
+        
         # Receive Confirmation
         response = self.proxy_socket.recv()
-
+        print('Waiting before deleting file')
+        time.sleep(10)
         if(response.decode('utf-8') == 'unsubscribed ' + topic):
             print('Client ' + str(self.id) + ' unsubscribed to topic ' + topic)
+            if os.path.exists(self.file_title):
+                os.remove(self.file_title)
 
         else:
             print('Failed to unsubscribe to topic ' + topic)
@@ -68,6 +75,8 @@ class Subscriber:
             print('Client ' + str(self.id) + ' received: ' + topic_message)
             self.last_msg_received = message_id
 
+            self.save_json()
+
             # Send Ack
             ack_message = '\x04' + topic + ' ' + str(self.id) + ' ' + str(self.last_msg_received)
             print('Sent ack: ' + ack_message)
@@ -80,6 +89,23 @@ class Subscriber:
         else:
             print('Received message from other topic:')
             print(response_bytes)
+
+    # Save all the infomration in a JSON
+    # The JSON is then read in case of a crash to retrieve all the information
+    def save_json(self):
+        file_title = 'client_' + self.id + '.txt'
+        data = {}
+        data['last_msg_received'] = self.last_msg_received
+        with open(file_title, 'w') as outfile:
+            json.dump(data, outfile)
+
+        print('Data Saved')
+
+    def read_json(self):
+        with open(self.file_title) as json_file:
+            data = json.load(json_file)
+            self.last_msg_received = data['last_msg_received']
+        print('New last message: ' + str(self.last_msg_received))
 
 # Class Publisher
 # Creates and publishes random messages about a topic given
@@ -200,6 +226,7 @@ class Proxy:
                 # If there are no subscribers in a topic, then it can be deleted
                 if len(self.topics[topic_name].subs) == 0:
                     del self.topics[topic_name]
+                    print(self.topics)  
                     print("Topic " + topic_name + " deleted because no client subscribed to it.")
             
             reply = 'unsubscribed ' + topic_name
@@ -220,10 +247,11 @@ class Proxy:
                 reply = 'ERROR: No subscriber exists for topic ' + topic_name + '.'
 
         # GET MESSAGE
-        elif message[0] == '\x03': #message is '\x03topic_name sub_id'
+        elif message[0] == '\x03': #message is '\x03topic_name sub_id last_message_received'
             topic_name, sub_id, last_message_received = message.replace(message[0], '').split()
 
             if topic_name in self.topics_key_view:
+                print("Received GET for " + topic_name + " and message " + last_message_received)
                 # Get message from the topic
                 topic = self.topics[topic_name]
 
@@ -240,7 +268,7 @@ class Proxy:
                 reply = topic_name + ' none'
         
         # ACK MESSAGE
-        elif message[0] == '\x04':
+        elif message[0] == '\x04': #message is '\x04topic_name sub_id last_message_received'
             topic_name, sub_id, last_message_received = message.replace(message[0], '').split()
 
             if topic_name in self.topics_key_view:
@@ -248,7 +276,7 @@ class Proxy:
                 topic = self.topics[topic_name]
 
                 topic.update_sub_status(sub_id, last_message_received)
-
+                
                 reply = topic_name + ' ackReceived'
 
         self.frontend.send_multipart([message_bytes[0], b'', reply.encode('utf-8')])
@@ -309,7 +337,7 @@ class Topic:
 
         # Views to help to analyse the dictionaries
         self.messages_stored_view = self.messages.keys()
-        self.last_message_view = self.subs_next_message.values()
+        self.next_message_view = self.subs_next_message.values()
 
         print('Topic ' + name + ' created successfully!')
 
@@ -319,27 +347,33 @@ class Topic:
         self.num_msg += 1
 
     # Removes all messages that have already been sent
-    def remove_message(self):
+    async def remove_message(self):
         # No messages means nothing can be removed
         if len(self.messages_stored_view) == 0:
             return
         
         # Values that will tell if a subscriber is waiting for the oldest message avaialble
         first_message_id = min(self.messages_stored_view)
-        subs_last_mesage_id = min(self.last_message_view)
+        subs_min_next_mesage_id = min(self.next_message_view)
 
         # If the lowest message id available is lower then the lowest message id that all subscribers are waiting
         # It can be deleted
-        if first_message_id < subs_last_mesage_id:
+        while first_message_id < subs_min_next_mesage_id:
             self.messages.pop(first_message_id)
-            return self.remove_message()
+
+            # No messages means nothing can be removed
+            if len(self.messages_stored_view) == 0:
+                return
+
+            first_message_id = min(self.messages_stored_view)
+
 
     # Retrieves a message to send to a subscriber
     def get_message(self, sub_id, last_message_received):
         if sub_id not in self.subs:
             print('Subscriber not subscribed to topic ' + self.name)
             return "Error"
-
+    
         # Get message id corresponding to the subscriber
         message_id = self.subs_next_message[sub_id]
 
@@ -348,7 +382,7 @@ class Topic:
             message_id = last_message_received + 1
 
         # message_id is only equal to num_msg when a subscriber as just subscribed to this topic
-        if message_id == self.num_msg:
+        if message_id == self.num_msg or self.num_msg < last_message_received:
             print("No message for subscriber.")
             return "Null"
 
@@ -357,12 +391,15 @@ class Topic:
 
         return message + ' ' + str(message_id)
 
+    # Update Information relative to a specific subscriber
     def update_sub_status(self, sub_id, last_message_received):
         # Update values related to this sub
         self.subs_next_message[sub_id] = int(last_message_received) + 1
 
-        # Check if any subscribers are waiting for this message, if not remove it
-        self.remove_message()
+        # Check if any message can be removed
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(self.remove_message())
 
         
     # Add a subscriber to this topic

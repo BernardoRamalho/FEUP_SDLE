@@ -10,11 +10,11 @@ def signal_handler(sig, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
-# Script is run "publisher.py topic_name n_puts"
+# Script is run "publisher.py topic_name total_puts [time_between_puts]"
 arguments = sys.argv[1:]
 
 if len(arguments) < 2 or len(arguments) > 3:
-    print("Numbers of arguments is not corret. Script is run as 'publisher.py topic_name n_puts [time_between_puts]'.")
+    print("Numbers of arguments is not corret. Script is run as 'publisher.py topic_name total_puts [time_between_puts]'.")
     sys.exit(0)
 
 pub = Publisher(arguments[0])
@@ -27,7 +27,7 @@ if len(arguments) == 3:
 
     # Check if user inputed a correct value
     if not arguments[2].isdigit():
-        print("Error in arguments. Value was not a digit for time_between_puts. Script is run as 'publisher.py topic_name n_puts [time_between_puts]'.")
+        print("Error in arguments. Value was not a digit for time_between_puts. Script is run as 'publisher.py topic_name total_puts [time_between_puts]'.")
         sys.exit(0)
 
     time_to_wait = float(arguments[2])

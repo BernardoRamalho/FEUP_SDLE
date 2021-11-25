@@ -47,8 +47,7 @@ class Subscriber:
         
         # Receive Confirmation
         response = self.proxy_socket.recv()
-        print('Waiting before deleting file')
-        time.sleep(10)
+
         if(response.decode('utf-8') == 'unsubscribed ' + topic):
             print('Client ' + str(self.id) + ' unsubscribed to topic ' + topic)
             if os.path.exists(self.file_title):
@@ -63,6 +62,7 @@ class Subscriber:
         get_message = '\x03' + topic + ' ' + str(self.id) + ' ' + str(self.last_msg_received)
         self.proxy_socket.send(get_message.encode('utf-8'))
 
+        print("\nSent request: " + get_message)
         # Read and Parse the response
         response_bytes = self.proxy_socket.recv_multipart()
 
@@ -72,14 +72,14 @@ class Subscriber:
             print("Topic " + topic + " doesn't exist.")
 
         if topic_received == topic:
-            print('Client ' + str(self.id) + ' received: ' + topic_message)
+            print('Received response: ' + topic_message)
             self.last_msg_received = message_id
 
             self.save_json()
 
             # Send Ack
             ack_message = '\x04' + topic + ' ' + str(self.id) + ' ' + str(self.last_msg_received)
-            print('Sent ack: ' + ack_message)
+            print('Sent ACK: ' + ack_message)
             self.proxy_socket.send(ack_message.encode('utf-8'))
 
             # Receive Ack Response
@@ -198,7 +198,7 @@ class Proxy:
     def parse_ft(self, message_bytes):
         message = message_bytes[2].decode('utf-8')
         reply = 'ERROR: Incorret Message Format. Message received: ' + message
-        
+
         # SUB MESSAGE
         if message[0] == '\x01': # message is '\x01topic_name sub_id'
             topic_name, sub_id = message.replace(message[0], '').split()
@@ -225,8 +225,7 @@ class Proxy:
 
                 # If there are no subscribers in a topic, then it can be deleted
                 if len(self.topics[topic_name].subs) == 0:
-                    del self.topics[topic_name]
-                    print(self.topics)  
+                    del self.topics[topic_name] 
                     print("Topic " + topic_name + " deleted because no client subscribed to it.")
             
             reply = 'unsubscribed ' + topic_name
@@ -251,7 +250,6 @@ class Proxy:
             topic_name, sub_id, last_message_received = message.replace(message[0], '').split()
 
             if topic_name in self.topics_key_view:
-                print("Received GET for " + topic_name + " and message " + last_message_received)
                 # Get message from the topic
                 topic = self.topics[topic_name]
 
@@ -261,7 +259,7 @@ class Proxy:
                 if topic_message == 'Null':
                     print("Waiting for message...")
                     time.sleep(2)
-                    self.parse_ft(message_bytes)
+                    return self.parse_ft(message_bytes)
                     
                 reply = topic_name + '  ' + topic_message
             else:
@@ -280,7 +278,7 @@ class Proxy:
                 reply = topic_name + ' ackReceived'
 
         self.frontend.send_multipart([message_bytes[0], b'', reply.encode('utf-8')])
-
+        print("Received: " + message + " --> Replied: " + reply)
 
     # Save all the infomration in a JSON
     # The JSON is then read in case of a crash to retrieve all the information

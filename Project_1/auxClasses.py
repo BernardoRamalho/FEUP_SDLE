@@ -417,3 +417,4 @@ class Topic:
 
         self.subs.remove(sub_id)
         self.subs_next_message.pop(sub_id)
+# end

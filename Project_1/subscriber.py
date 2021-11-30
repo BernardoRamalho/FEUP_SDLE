@@ -3,21 +3,18 @@ import sys
 import signal
 from auxClasses import Subscriber
 
-# Signal Handler for Ctrl+C
-def signal_handler(sig, frame):
-    print('Closing Subscriber!')
-    sys.exit(0)
-
-signal.signal(signal.SIGINT, signal_handler)
-
-# Script in run "subscriber.py id topic_name [n_gets] [time_between_gets]"
+# Script in run "subscriber.py id topic_name n_gets [time_between_gets]"
 arguments = sys.argv[1:]
 
-if len(arguments) > 4 or len(arguments) < 2:
+if len(arguments) > 4 or len(arguments) < 3:
     print("Numbers of arguments is not corret. Script is run as 'subscriber.py id topic_name [n_gets] [time_between_gets]'.")
     sys.exit(0)
 
 wait = False
+
+if arguments[2] != "-1" and not arguments[2].isdigit():
+    print("Value was not a digit for n_gets. Script is run as 'subscriber.py id topic_name [n_gets] [time_between_gets]")
+    sys.exit(0)
 
 # Check if there is any wait time between gets
 if len(arguments) == 4:
@@ -32,9 +29,10 @@ if len(arguments) == 4:
 
 sub = Subscriber(arguments[0])
 
+
 sub.subscribe(arguments[1])
 
-if len(arguments) == 2:
+if arguments[2] == "-1":
     while True:
         sub.get(arguments[1])
 
@@ -42,6 +40,9 @@ if len(arguments) == 2:
             print("Waiting before next get...")
             time.sleep(time_to_wait)
 else:
+    if not arguments[2].isdigit():
+        print("Arguments given is not a valid digit.")
+        sys.exit(0)
     for x in range(int(arguments[2])):
         sub.get(arguments[1])
 
@@ -50,4 +51,4 @@ else:
             time.sleep(time_to_wait)
         
 
-sub.unsubscribe('fruit')
+sub.unsubscribe(arguments[1])
